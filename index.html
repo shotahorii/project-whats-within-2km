@@ -1,17 +1,12 @@
 <!DOCTYPE HTML>
-
 <html>
-
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>What's within 2km</title>
-  <style>
-    #mapid { height: 600px; }
-  </style>
-
+  <style>#mapid {height: 600px;}</style>
   <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
-
-  <!-- Don't change here. For Leaflet. -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
    crossorigin=""/>
@@ -19,20 +14,17 @@
     integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
     crossorigin="">
   </script>
-  <!-- Until here.-->
-
 </head>
+
 <body>
-
   <div id="mapid" ng-app="myApp" ng-controller="myCtrl"></div>
-
 </body>
 
 <script type="text/javascript">
-  var app = angular.module('myApp', []);
+  const app = angular.module('myApp', []);
   app.controller('myCtrl', function($scope) {
     $scope.is_circle_shown = false;
-
+		/* init map */
     $scope.mymap = L.map('mapid').setView([53.3430402,-6.2566447], 13);
     L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
       attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
@@ -43,26 +35,52 @@
       accessToken: 'pk.eyJ1Ijoic2hzaW5rZXIiLCJhIjoiY2s4YnI1cXloMGVsYTNncGU4cTZjeGkzdyJ9.lrMuAwNcne6quOs2FjGqxA'
     }).addTo($scope.mymap);
 
+		/* init markers */
+		$scope.supermarkets = L.layerGroup(
+			_.map(supermarkets, function(e){ return L.marker([e[1], e[2]]).bindPopup(e[0]);})
+		);
+		$scope.pharmacies = L.layerGroup(
+			_.map(pharmacies, function(e){ return L.marker([e[1], e[2]]).bindPopup(e[0]);})
+		);
+		$scope.supermarkets.addTo($scope.mymap);
+		$scope.pharmacies.addTo($scope.mymap);
+		L.control.layers(
+			{},
+			{"Supermarkets": $scope.supermarkets,"Pharmacies": $scope.pharmacies}
+		).addTo($scope.mymap);
+
+		/* click event */
     $scope.mymap.on('click', function(e) {
       if($scope.is_circle_shown){
-        $scope.mymap.removeLayer($scope.circle)
+        $scope.mymap.removeLayer($scope.circle_out)
+				$scope.mymap.removeLayer($scope.circle_in)
         $scope.is_circle_shown = false;
       } else {
-        $scope.circle = L.circle([e.latlng.lat, e.latlng.lng], {
-            color: 'blue',
+        $scope.circle_out = L.circle([e.latlng.lat, e.latlng.lng], {
+            color: 'gray',
             fillColor: 'blue',
             fillOpacity: 0.1,
             radius: 2000
         }).addTo($scope.mymap);
+				$scope.circle_in = L.circle([e.latlng.lat, e.latlng.lng], {
+            color: 'gray',
+            fillColor: 'blue',
+            fillOpacity: 0.1,
+            radius: 10
+        }).addTo($scope.mymap);
         $scope.is_circle_shown = true;
       }
     });
-
-
   });
 
+	/* database */
+	const supermarkets = [
+		['EuroSpar Barrow Street',53.3401936,-6.2374167],
+		['Fresh Grand Canal',53.3434368,-6.2410043],
+	];
+	const pharmacies = [
+		['Gallery Quay Pharmacy',53.3427544,-6.2423422],
+	];
 
 </script>
-
-
 </html>
