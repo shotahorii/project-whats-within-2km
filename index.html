@@ -13,103 +13,118 @@
     integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
     crossorigin="">
   </script>
-	<style> html, body, #mapid {height: 100%;} </style>
+	<!-- Custom CSS -->
+	<style>
+	html, body, #mapid {height: 100%;}
+	.info {
+    padding: 6px 8px; font: 14px/16px Arial,Helvetica,sans-serif; background: white;
+    background: rgba(255,255,255,0.8); box-shadow: 0 0 15px rgba(0,0,0,0.2); border-radius: 5px;
+	}
+	.info h3 {
+	    margin: 0px; margin-top: 2px; margin-right: 10px; margin-bottom: 2px; color: #777;
+	}
+	.info h5 {
+	    margin: 0px; margin-top: 2px; margin-bottom: 5px; color: #777;
+	}
+</style>
 </head>
 
 <body>
-  <div id="mapid" ng-app="myApp" ng-controller="myCtrl"></div>
+	<div id="mapid" ng-app="myApp" ng-controller="myCtrl"></div>
 </body>
+
 <!-- Angular JS & Underscore JS-->
 <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
 
 <script type="text/javascript" src="data.js"></script>
-
 <script type="text/javascript">
   const app = angular.module('myApp', []);
   app.controller('myCtrl', function($scope) {
-		/* current status */
-    $scope.is_centre_defined = false;
-		$scope.circle = undefined, $scope.centre = undefined;
-
 		/* init map */
-    $scope.mymap = L.map('mapid').setView([53.3430402,-6.2566447], 13);
+    const mymap = L.map('mapid').setView([53.3430402,-6.2566447], 13);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 								maxZoom: 19,
 								attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-							}).addTo($scope.mymap);
+							}).addTo(mymap);
 
-		/* define markers */
-		const iconSupermarket = L.divIcon({
-	    html: '<i class="fas fa-shopping-cart fa-lg" style="color:black;"></i>',
-	    iconSize: [30, 30],
-	    className: 'iconShopping'
+		/* init marker layers */
+		let layers = _.map(Object.keys(data),function(key){
+			return {
+				'key':key,
+				'layer':L.layerGroup(_.map(data[key], function(e){ return L.marker([e[0], e[1]],{icon:e[2]}).bindPopup(e[3]);}))
+			};
 		});
-		const iconPharmacy = L.divIcon({
-	    html: '<i class="fas fa-prescription-bottle-alt fa-lg" style="color:black;"></i>',
-	    iconSize: [30, 30],
-	    className: 'iconPharmacy'
-		});
-		/* init markers */
-		$scope.supermarkets = L.layerGroup(
-			_.map(supermarkets, function(e){ return L.marker([e[0], e[1]],{icon:iconSupermarket}).bindPopup(e[2]);})
-		);
-		$scope.pharmacies = L.layerGroup(
-			_.map(pharmacies, function(e){ return L.marker([e[0], e[1]],{icon:iconPharmacy}).bindPopup(e[2]);})
-		);
-		$scope.supermarkets.addTo($scope.mymap);
-		$scope.pharmacies.addTo($scope.mymap);
-		L.control.layers(
-			{},
-			{"Supermarkets": $scope.supermarkets,"Pharmacies": $scope.pharmacies}
-		).addTo($scope.mymap);
+		layers = Object.assign({}, ...layers.map((e) => ({[e.key]: e.layer})));
+		Object.keys(layers).forEach(key => layers[key].addTo(mymap));
+		L.control.layers({},layers).addTo(mymap);
 
-		/* click event */
-    $scope.mymap.on('click', function(e) {
-      if($scope.is_centre_defined){
-        $scope.mymap.removeLayer($scope.circle)
-				$scope.mymap.removeLayer($scope.centre)
-        $scope.is_centre_defined = false;
-				$scope.circle = undefined, $scope.centre = undefined;
-      } else {
-        $scope.circle = L.circle([e.latlng.lat, e.latlng.lng], {
-            weight: 0,
-            fillColor: 'grey',
-            fillOpacity: 0.2,
-            radius: 2000
-        }).addTo($scope.mymap);
-				$scope.centre = L.marker([e.latlng.lat, e.latlng.lng]).addTo($scope.mymap);
-        $scope.is_centre_defined = true;
-      }
-    });
+		/* init status */
+		initAllStatus();
 
-		/* distance calc - https://www.movable-type.co.uk/scripts/latlong.html */
-		const degree2radian = (degree) => degree*(Math.PI/180);
-		function get_distance(lat1,lng1,lat2,lng2){
-			var lat1_r = degree2radian(lat1), lat2_r = degree2radian(lat2);
-			var delta_lat = degree2radian(lat2-lat1), delta_lng = degree2radian(lng2-lng1);
-			var a = Math.sin(delta_lat/2) * Math.sin(delta_lat/2) +
+		/* functions for status control */
+		function initAllStatus(){
+			$scope.is_centre_defined = false;
+			$scope.circle = undefined, $scope.centre = undefined;
+			$scope.within2km = _.map(Object.keys(data),key => [key,0]); /* e.g. [['Tesco',0],['Spar',0],['Centra',0],['Boots',0]]; */
+		};
+		function removeCircle(){
+			mymap.removeLayer($scope.circle);
+			mymap.removeLayer($scope.centre);
+			initAllStatus();
+		};
+		function addCircle(e){
+			$scope.circle = L.circle([e.latlng.lat, e.latlng.lng], {
+					weight: 0, fillColor: 'grey', fillOpacity: 0.2, radius: 2000
+			}).addTo(mymap);
+			$scope.centre = L.marker([e.latlng.lat, e.latlng.lng]).addTo(mymap);
+			$scope.is_centre_defined = true;
+		};
+		function calcWithin2km(e){
+			$scope.within2km = _.map(Object.keys(data),key => [key,_count_within2km(e.latlng.lat, e.latlng.lng,data[key])])
+		};
+
+		/* Helper functions for distance calc - https://www.movable-type.co.uk/scripts/latlong.html */
+		const _degree2radian = (degree) => degree*(Math.PI/180);
+		function _get_distance(lat1,lng1,lat2,lng2){
+			let lat1_r = _degree2radian(lat1), lat2_r = _degree2radian(lat2);
+			let delta_lat = _degree2radian(lat2-lat1), delta_lng = _degree2radian(lng2-lng1);
+			let a = Math.sin(delta_lat/2) * Math.sin(delta_lat/2) +
 							Math.cos(lat1_r) * Math.cos(lat2_r) * Math.sin(delta_lng/2) * Math.sin(delta_lng/2);
-			var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+			let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 			return 6371000 * c;
 		};
-		function count_within2km(latlng_list){
-			var c_lat = $scope.centre.getLatLng().lat;
-			var c_lng = $scope.centre.getLatLng().lng;
+		function _count_within2km(c_lat,c_lng,latlng_list){
 			return _.map(latlng_list, function(latlng){
-				return get_distance(latlng[0],latlng[1],c_lat,c_lng)<=2000?1:0;
+				return _get_distance(latlng[0],latlng[1],c_lat,c_lng)<=2000?1:0;
 			}).reduce((s, f) => s + f, 0);
 		};
 
-  });
+		/* define info box on bottom left */
+		const info = L.control({position: 'bottomleft'});
+		info.onAdd = function (map) {
+		    this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+		    this.update();
+		    return this._div;
+		};
+		info.update = function () {
+		    this._div.innerHTML = "<h3>What's within 2km?</h3> <h5>Click on the map to see</h5>"
+					+ _.map($scope.within2km,function(e){return '<p>'+e[0]+':'+e[1].toString()+'</p>'}).reduce((s, f) => s + f, '');
+		};
+		info.addTo(mymap);
 
-	/*L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
-		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-		maxZoom: 18,
-		id: 'mapbox/streets-v11',
-		tileSize: 512,
-		zoomOffset: -1,
-		accessToken: 'pk.eyJ1Ijoic2hzaW5rZXIiLCJhIjoiY2s4YnI1cXloMGVsYTNncGU4cTZjeGkzdyJ9.lrMuAwNcne6quOs2FjGqxA'
-	}).addTo($scope.mymap);*/
+		/* click event */
+    mymap.on('click', function(e) {
+      if($scope.is_centre_defined){
+        removeCircle();
+				info.update();
+      } else {
+				addCircle(e);
+				calcWithin2km(e);
+				info.update();
+      }
+    });
+
+  });
 </script>
 </html>
