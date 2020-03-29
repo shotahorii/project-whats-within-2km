@@ -26,6 +26,9 @@
 	.info h5 {
 	    margin: 0px; margin-top: 2px; margin-bottom: 5px; color: #777;
 	}
+	.info p {
+		margin: 0px; margin-bottom: 5px; color: #555;
+}
 </style>
 </head>
 
@@ -52,7 +55,7 @@
 		let layers = _.map(Object.keys(data),function(key){
 			return {
 				'key':key,
-				'layer':L.layerGroup(_.map(data[key], function(e){ return L.marker([e[0], e[1]],{icon:e[2]}).bindPopup(e[3]);}))
+				'layer':L.layerGroup(_.map(data[key]['points'], function(e){ return L.marker([e[0], e[1]],{icon:e[2]}).bindPopup(e[3]);}))
 			};
 		});
 		layers = Object.assign({}, ...layers.map((e) => ({[e.key]: e.layer})));
@@ -66,7 +69,7 @@
 		function initAllStatus(){
 			$scope.is_centre_defined = false;
 			$scope.circle = undefined, $scope.centre = undefined;
-			$scope.within2km = _.map(Object.keys(data),key => [key,0]); /* e.g. [['Tesco',0],['Spar',0],['Centra',0],['Boots',0]]; */
+			$scope.within2km = _.map(Object.keys(data),key => [key,data[key]['icon'],0]); /* e.g. [['Tesco',<icon tag>,0],['Spar',<icon tag>,0]]; */
 		};
 		function removeCircle(){
 			mymap.removeLayer($scope.circle);
@@ -81,7 +84,7 @@
 			$scope.is_centre_defined = true;
 		};
 		function calcWithin2km(e){
-			$scope.within2km = _.map(Object.keys(data),key => [key,_count_within2km(e.latlng.lat, e.latlng.lng,data[key])])
+			$scope.within2km = _.map(Object.keys(data),key => [key,data[key]['icon'],_count_within2km(e.latlng.lat, e.latlng.lng,data[key]['points'])])
 		};
 
 		/* Helper functions for distance calc - https://www.movable-type.co.uk/scripts/latlong.html */
@@ -109,7 +112,7 @@
 		};
 		info.update = function () {
 		    this._div.innerHTML = "<h3>What's within 2km?</h3> <h5>Click on the map to see</h5>"
-					+ _.map($scope.within2km,function(e){return '<p>'+e[0]+':'+e[1].toString()+'</p>'}).reduce((s, f) => s + f, '');
+					+ _.map($scope.within2km,function(e){return '<p>'+e[1]+' '+e[0]+': '+e[2].toString()+'</p>'}).reduce((s, f) => s + f, '');
 		};
 		info.addTo(mymap);
 
