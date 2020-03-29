@@ -3,10 +3,9 @@
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>What's within 2km</title>
-  <style>#mapid {height: 600px;}</style>
-  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
-  <!-- Leaflet -->
+	<!-- Font Awesome JS -->
+	<script src="https://kit.fontawesome.com/77cdee0fcb.js" crossorigin="anonymous"></script>
+  <!-- Leaflet CSS then JS-->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
    crossorigin=""/>
@@ -14,33 +13,49 @@
     integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
     crossorigin="">
   </script>
+	<style> html, body, #mapid {height: 100%;} </style>
 </head>
 
 <body>
   <div id="mapid" ng-app="myApp" ng-controller="myCtrl"></div>
 </body>
+<!-- Angular JS & Underscore JS-->
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+
+<script type="text/javascript" src="data.js"></script>
 
 <script type="text/javascript">
   const app = angular.module('myApp', []);
   app.controller('myCtrl', function($scope) {
-    $scope.is_circle_shown = false;
+		/* current status */
+    $scope.is_centre_defined = false;
+		$scope.circle = undefined, $scope.centre = undefined;
+
 		/* init map */
     $scope.mymap = L.map('mapid').setView([53.3430402,-6.2566447], 13);
-    L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
-      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-      maxZoom: 18,
-      id: 'mapbox/streets-v11',
-      tileSize: 512,
-      zoomOffset: -1,
-      accessToken: 'pk.eyJ1Ijoic2hzaW5rZXIiLCJhIjoiY2s4YnI1cXloMGVsYTNncGU4cTZjeGkzdyJ9.lrMuAwNcne6quOs2FjGqxA'
-    }).addTo($scope.mymap);
+		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+								maxZoom: 19,
+								attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+							}).addTo($scope.mymap);
 
+		/* define markers */
+		const iconSupermarket = L.divIcon({
+	    html: '<i class="fas fa-shopping-cart fa-lg" style="color:black;"></i>',
+	    iconSize: [30, 30],
+	    className: 'iconShopping'
+		});
+		const iconPharmacy = L.divIcon({
+	    html: '<i class="fas fa-prescription-bottle-alt fa-lg" style="color:black;"></i>',
+	    iconSize: [30, 30],
+	    className: 'iconPharmacy'
+		});
 		/* init markers */
 		$scope.supermarkets = L.layerGroup(
-			_.map(supermarkets, function(e){ return L.marker([e[1], e[2]]).bindPopup(e[0]);})
+			_.map(supermarkets, function(e){ return L.marker([e[0], e[1]],{icon:iconSupermarket}).bindPopup(e[2]);})
 		);
 		$scope.pharmacies = L.layerGroup(
-			_.map(pharmacies, function(e){ return L.marker([e[1], e[2]]).bindPopup(e[0]);})
+			_.map(pharmacies, function(e){ return L.marker([e[0], e[1]],{icon:iconPharmacy}).bindPopup(e[2]);})
 		);
 		$scope.supermarkets.addTo($scope.mymap);
 		$scope.pharmacies.addTo($scope.mymap);
@@ -51,36 +66,50 @@
 
 		/* click event */
     $scope.mymap.on('click', function(e) {
-      if($scope.is_circle_shown){
-        $scope.mymap.removeLayer($scope.circle_out)
-				$scope.mymap.removeLayer($scope.circle_in)
-        $scope.is_circle_shown = false;
+      if($scope.is_centre_defined){
+        $scope.mymap.removeLayer($scope.circle)
+				$scope.mymap.removeLayer($scope.centre)
+        $scope.is_centre_defined = false;
+				$scope.circle = undefined, $scope.centre = undefined;
       } else {
-        $scope.circle_out = L.circle([e.latlng.lat, e.latlng.lng], {
-            color: 'gray',
-            fillColor: 'blue',
-            fillOpacity: 0.1,
+        $scope.circle = L.circle([e.latlng.lat, e.latlng.lng], {
+            weight: 0,
+            fillColor: 'grey',
+            fillOpacity: 0.2,
             radius: 2000
         }).addTo($scope.mymap);
-				$scope.circle_in = L.circle([e.latlng.lat, e.latlng.lng], {
-            color: 'gray',
-            fillColor: 'blue',
-            fillOpacity: 0.1,
-            radius: 10
-        }).addTo($scope.mymap);
-        $scope.is_circle_shown = true;
+				$scope.centre = L.marker([e.latlng.lat, e.latlng.lng]).addTo($scope.mymap);
+        $scope.is_centre_defined = true;
       }
     });
+
+		/* distance calc - https://www.movable-type.co.uk/scripts/latlong.html */
+		const degree2radian = (degree) => degree*(Math.PI/180);
+		function get_distance(lat1,lng1,lat2,lng2){
+			var lat1_r = degree2radian(lat1), lat2_r = degree2radian(lat2);
+			var delta_lat = degree2radian(lat2-lat1), delta_lng = degree2radian(lng2-lng1);
+			var a = Math.sin(delta_lat/2) * Math.sin(delta_lat/2) +
+							Math.cos(lat1_r) * Math.cos(lat2_r) * Math.sin(delta_lng/2) * Math.sin(delta_lng/2);
+			var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+			return 6371000 * c;
+		};
+		function count_within2km(latlng_list){
+			var c_lat = $scope.centre.getLatLng().lat;
+			var c_lng = $scope.centre.getLatLng().lng;
+			return _.map(latlng_list, function(latlng){
+				return get_distance(latlng[0],latlng[1],c_lat,c_lng)<=2000?1:0;
+			}).reduce((s, f) => s + f, 0);
+		};
+
   });
 
-	/* database */
-	const supermarkets = [
-		['EuroSpar Barrow Street',53.3401936,-6.2374167],
-		['Fresh Grand Canal',53.3434368,-6.2410043],
-	];
-	const pharmacies = [
-		['Gallery Quay Pharmacy',53.3427544,-6.2423422],
-	];
-
+	/*L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+		maxZoom: 18,
+		id: 'mapbox/streets-v11',
+		tileSize: 512,
+		zoomOffset: -1,
+		accessToken: 'pk.eyJ1Ijoic2hzaW5rZXIiLCJhIjoiY2s4YnI1cXloMGVsYTNncGU4cTZjeGkzdyJ9.lrMuAwNcne6quOs2FjGqxA'
+	}).addTo($scope.mymap);*/
 </script>
 </html>
