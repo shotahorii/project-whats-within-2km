@@ -2,9 +2,11 @@
 <html>
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>What's within 2km</title>
+	<title>What's within X km</title>
 	<!-- Font Awesome JS -->
 	<script src="https://kit.fontawesome.com/77cdee0fcb.js" crossorigin="anonymous"></script>
+	<!-- Angular Material style sheet -->
+	<link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/angular_material/1.1.12/angular-material.min.css">
   <!-- Leaflet CSS then JS-->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
@@ -16,118 +18,303 @@
 	<!-- Custom CSS -->
 	<style>
 	html, body, #mapid {height: 100%;}
-	.info {
-    padding: 6px 8px; font: 14px/16px Arial,Helvetica,sans-serif; background: white;
-    background: rgba(255,255,255,0.8); box-shadow: 0 0 15px rgba(0,0,0,0.2); border-radius: 5px;
+	#info {
+		padding: 6px 8px; font: 14px/16px Arial,Helvetica,sans-serif; color: #555; background: white;
+		background: rgba(255,255,255,0.8); box-shadow: 0 0 15px rgba(0,0,0,0.3); border-radius: 5px;
+		position:absolute; top:15px; left:15px; z-index:999;
 	}
-	.info h3 {
-	    margin: 0px; margin-top: 2px; margin-right: 10px; margin-bottom: 2px; color: #777;
-	}
-	.info h5 {
-	    margin: 0px; margin-top: 2px; margin-bottom: 5px; color: #777;
-	}
-	.info p {
-		margin: 0px; margin-bottom: 5px; color: #555;
-}
+	#info h3 { margin: 0px; margin-top: 5px; margin-right: 10px; margin-bottom: 2px; }
+	#info h5 { margin: 0px; margin-top: 2px; margin-bottom: 5px; }
+	#info p { margin: 0px; margin-bottom: 5px; }
 </style>
 </head>
 
-<body>
-	<div id="mapid" ng-app="myApp" ng-controller="myCtrl"></div>
-</body>
-
-<!-- Angular JS & Underscore JS-->
-<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
+<body ng-app="myApp" ng-controller="myCtrl">
+	<div id="mapid"></div>
+	<div id='info'>
+		<h3>What's within <span style="color: #FF0266;font-size: 25px;">{{radius_km}}</span> km?</h3>
+		<h5>Click on the map to see!</h5>
+		<md-slider flex='' md-discrete='' ng-model='radius_km' ng-change="onRadiusChange()" step='1' min='1' max='10' aria-label='default'></md-slider>
+		<div d3-doughnuts style="width: 100%;"></div> <!--.style('font-weight', 'bold')-->
+	</div>
+<!-- D3 JS-->
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<!-- Underscore JS-->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
-
+<!-- Angular Material requires Angular.js Libraries -->
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.6/angular.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.6/angular-animate.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.6/angular-aria.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.6/angular-messages.min.js"></script>
+<!-- Angular Material Library -->
+<script src="https://ajax.googleapis.com/ajax/libs/angular_material/1.1.12/angular-material.min.js"></script>
+<!-- Custom JS -->
 <script type="text/javascript" src="data.js"></script>
 <script type="text/javascript">
-  const app = angular.module('myApp', []);
-  app.controller('myCtrl', function($scope) {
-		/* init map */
-    const mymap = L.map('mapid').setView([53.3430402,-6.2566447], 13);
+  const app = angular.module('myApp', ['ngMaterial']);
+	/* Angular Controller */
+  app.controller('myCtrl', ['$scope','dataService',function($scope,dataService) {
+		/* Initialisation of the map */
+		const mymap = L.map('mapid',{zoomControl: false}).setView([53.3430402,-6.2566447], 13);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 								maxZoom: 19,
 								attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 							}).addTo(mymap);
-
-		/* init marker layers */
-		let layers = _.map(Object.keys(data),function(key){
-			return {
-				'key':key,
-				'layer':L.layerGroup(_.map(data[key]['points'], function(e){ return L.marker([e[0], e[1]],{icon:e[2]}).bindPopup(e[3]);}))
-			};
-		});
-		layers = Object.assign({}, ...layers.map((e) => ({[e.key]: e.layer})));
+		L.control.zoom({position:'topright'}).addTo(mymap);
+		/* Initialisation of markers */
+		const layers = dataService.construct_layers();
 		Object.keys(layers).forEach(key => layers[key].addTo(mymap));
 		L.control.layers({},layers).addTo(mymap);
-
 		/* init status */
-		initAllStatus();
-
+		$scope.is_position_defined = false;
+		$scope.lat = undefined,
+		$scope.lng = undefined;
+		$scope.radius_km = 2;
+		$scope.neighbour_info = dataService.get_neighbour_info($scope.lat,$scope.lng,$scope.radius_km);
 		/* functions for status control */
-		function initAllStatus(){
-			$scope.is_centre_defined = false;
-			$scope.circle = undefined, $scope.centre = undefined;
-			$scope.within2km = _.map(Object.keys(data),key => [key,data[key]['icon'],0]); /* e.g. [['Tesco',<icon tag>,0],['Spar',<icon tag>,0]]; */
+		function clearPosition(){
+			$scope.is_position_defined = false;
+			$scope.lat = undefined, $scope.lng = undefined;
+		};
+		function setPosition(e){ // e: click event on the map
+			$scope.is_position_defined = true;
+			$scope.lat = e.latlng.lat, $scope.lng = e.latlng.lng;
+		};
+		function updateNeighbourInfo(){
+			$scope.neighbour_info = dataService.get_neighbour_info($scope.lat,$scope.lng,$scope.radius_km);
 		};
 		function removeCircle(){
 			mymap.removeLayer($scope.circle);
-			mymap.removeLayer($scope.centre);
-			initAllStatus();
+			mymap.removeLayer($scope.centre_pin);
 		};
-		function addCircle(e){
-			$scope.circle = L.circle([e.latlng.lat, e.latlng.lng], {
-					weight: 0, fillColor: 'grey', fillOpacity: 0.2, radius: 2000
+		function addCircle(){
+			$scope.circle = L.circle([$scope.lat, $scope.lng], {
+					weight: 0, fillColor: "grey", fillOpacity: 0.2, radius: $scope.radius_km*1000
 			}).addTo(mymap);
-			$scope.centre = L.marker([e.latlng.lat, e.latlng.lng]).addTo(mymap);
-			$scope.is_centre_defined = true;
+			$scope.centre_pin = L.marker([$scope.lat, $scope.lng]).addTo(mymap);
 		};
-		function calcWithin2km(e){
-			$scope.within2km = _.map(Object.keys(data),key => [key,data[key]['icon'],_count_within2km(e.latlng.lat, e.latlng.lng,data[key]['points'])])
+		/* event handlers */
+    mymap.on('click', function(e) {
+			$scope.$apply(function () {　// notify the change
+				if($scope.is_position_defined){
+					clearPosition();
+					removeCircle();
+					updateNeighbourInfo();
+				} else {
+					setPosition(e);
+					addCircle();
+					updateNeighbourInfo();
+				}
+      });
+    });
+		$scope.onRadiusChange = function(){
+			if($scope.is_position_defined){
+				removeCircle();
+				addCircle();
+				updateNeighbourInfo();
+				info.update();
+			}
 		};
-
-		/* Helper functions for distance calc - https://www.movable-type.co.uk/scripts/latlong.html */
-		const _degree2radian = (degree) => degree*(Math.PI/180);
-		function _get_distance(lat1,lng1,lat2,lng2){
-			let lat1_r = _degree2radian(lat1), lat2_r = _degree2radian(lat2);
-			let delta_lat = _degree2radian(lat2-lat1), delta_lng = _degree2radian(lng2-lng1);
-			let a = Math.sin(delta_lat/2) * Math.sin(delta_lat/2) +
+		$scope.temp = function(e){
+			console.log('[temp] clicked : '+e);
+		};
+  }]);
+	/* Angular Service */
+	app.factory('dataService', function(){
+		/* Functions for distance calculation - https://www.movable-type.co.uk/scripts/latlong.html */
+		const metre_per_min = 80; // assuming average human walks 80m in 1 min. This is used to calc time estimation.
+		const degree2radian = (degree) => degree*(Math.PI/180);
+		const get_distance = (lat1,lng1,lat2,lng2) => {
+			const lat1_r = degree2radian(lat1), lat2_r = degree2radian(lat2);
+			const delta_lat = degree2radian(lat2-lat1), delta_lng = degree2radian(lng2-lng1);
+			const a = Math.sin(delta_lat/2) * Math.sin(delta_lat/2) +
 							Math.cos(lat1_r) * Math.cos(lat2_r) * Math.sin(delta_lng/2) * Math.sin(delta_lng/2);
-			let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+			const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 			return 6371000 * c;
 		};
-		function _count_within2km(c_lat,c_lng,latlng_list){
-			return _.map(latlng_list, function(latlng){
-				return _get_distance(latlng[0],latlng[1],c_lat,c_lng)<=2000?1:0;
-			}).reduce((s, f) => s + f, 0);
-		};
+		const count_within = (list_distances_metre,radius_km) => _.map(list_distances_metre,(distance) => distance<=(radius_km*1000)?1:0).reduce((s, f) => s + f, 0);
+		const min_distance = (list_distances_metre) => Math.min(...list_distances_metre);
+		const metre2walk_mins = (metre) => Math.round(metre/metre_per_min);
 
-		/* define info box on bottom left */
-		const info = L.control({position: 'bottomleft'});
-		info.onAdd = function (map) {
-		    this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
-		    this.update();
-		    return this._div;
-		};
-		info.update = function () {
-		    this._div.innerHTML = "<h3>What's within 2km?</h3> <h5>Click on the map to see</h5>"
-					+ _.map($scope.within2km,function(e){return '<p>'+e[1]+' '+e[0]+': '+e[2].toString()+'</p>'}).reduce((s, f) => s + f, '');
-		};
-		info.addTo(mymap);
+	  return {
+	    get_neighbour_info: function(lat,lng,radius_km) {
+				if (lat!=undefined && lng!=undefined){
+					return _.map(layer_data, function(layer){
+						const list_distances = _.map(layer.points, (point) => get_distance(point.lat,point.lng,lat,lng));
+						const num_points = count_within(list_distances,radius_km);
+						const closest_walk_mins = metre2walk_mins(min_distance(list_distances));
+						return {
+							'name':layer.name, 'icon':layer.icon, 'num_points':num_points,
+							'closest_walk':num_points==0?0:Math.min(closest_walk_mins,60) // Cap by maximum mins 60 for visualisation purpose.
+						};
+					});
+				} else {
+					return _.map(layer_data, layer => {return {'name':layer.name,'icon':layer.icon,'num_points':0,'closest_walk':0};});
+				}
+	    },
 
-		/* click event */
-    mymap.on('click', function(e) {
-      if($scope.is_centre_defined){
-        removeCircle();
-				info.update();
-      } else {
-				addCircle(e);
-				calcWithin2km(e);
-				info.update();
-      }
-    });
+			construct_layers: function(){
+				const layers = {};
+				_.map(layer_data,function(layer){
+					layers[layer.name] = L.layerGroup(_.map(layer.points, function(point){ return L.marker([point.lat, point.lng],{icon:point.icon}).bindPopup(point.name);}))
+				});
+				return layers;
+			}
+	  };
+	});
+	/* Angular Directive */
+	app.directive('d3Doughnuts', ['$window', '$compile', function ($window, $compile) {
+		const main = function(scope, element, attrs){
+		// -- watch data change --
+		scope.$watch(function() {
+			return scope.$parent.neighbour_info;
+		}, function() {
+			scope.render(scope.$parent.neighbour_info);
+		});
+		// render function
+		scope.render = function(data) {
+			d3.select(element[0]).selectAll('*').remove(); // init draw area
+			if (!data) return; // if the data doesn't exist, return
 
-  });
+			//define draw size
+			const twoPi = Math.PI * 2;
+			const num_doughnuts = data.length;
+			const radius = 15;
+			const border = 2;
+			const icon_size = 15;
+			const pad_left = 10;
+			const pad_height = 20;
+			const boxheight = (radius*2 + pad_height) * num_doughnuts + pad_height*2;
+			const boxwidth = 190;
+
+			//define base arc
+			const arc = d3.arc()
+			.startAngle(0)
+			.innerRadius(radius)
+			.outerRadius(radius-border);
+
+			//define draw area
+			const svg = d3.select(element[0]).append('svg')
+			.attr('width', boxwidth)
+			.attr('height', boxheight);
+
+			//define data features
+			const texts = _.map(data,(layer)=>layer.name+' : '+layer.num_points.toString()+' stores');
+			const icons = _.map(data,(layer)=>layer.icon);
+			const colors = _.map(data,(layer)=>'#FF0266');
+
+			// draw initial shapes
+			const g = [];
+			const background = [];
+			const foreground = [];
+			const numberText = [];
+			for (let i=0; i<num_doughnuts; i++){
+				g[i] = svg.append('g')
+				.attr('transform', 'translate('+ pad_left + ',' + (radius + pad_height + i*(radius+2*pad_height)) + ')'); //(i+1)*boxheight/6
+
+				background[i] = g[i].append('path')
+				.attr('class', 'background')
+				.attr('fill', '#ccc')
+				.attr('fill-opacity', 0.5)
+				.attr('d', arc.endAngle(twoPi))
+				.attr('transform', 'translate(115,0)');
+
+				foreground[i] = g[i].append('path')
+				.attr('class', 'foreground')
+				.attr('fill',colors[i])
+				.attr('fill-opacity',1)
+				.attr('transform', 'translate(115,0)');
+
+				numberText[i] = g[i].append('text')
+				.attr('fill','#888')
+				.attr('text-anchor','middle')
+				.attr('dy','.35em')
+				.style('font-weight', 'bold')
+				.style('font-size', '12px')
+				.attr('transform', 'translate(115,0)');
+
+				g[i].append('text')
+				.attr('fill','#555')
+				.attr('text-anchor','left')
+				.attr('dy','.35em')
+				.attr('transform', 'translate('+(icon_size+3)+','+(-radius-10)+')')
+				.style('font-weight', 'bold')
+				.style('font-size', '12px')
+				.html(texts[i])
+				.style('cursor','pointer')
+				.attr('ng-click', '$parent.temp("'+texts[i]+'")');
+
+				g[i].append('text')
+				.attr('fill','#555')
+				.attr('text-anchor','left')
+				.attr('dy','.35em')
+				.attr('transform', 'translate('+(icon_size+3)+','+(-radius+10)+')')
+				.style('font-size', '10px')
+				.html('Mins on foot to');
+
+				g[i].append('text')
+				.attr('fill','#555')
+				.attr('text-anchor','left')
+				.attr('dy','.35em')
+				.attr('transform', 'translate('+(icon_size+3)+','+(-radius+20)+')')
+				.style('font-size', '10px')
+				.html('the closest store:');
+
+				g[i].append('svg:foreignObject')
+				.attr('text-anchor','left')
+				.attr('transform', 'translate(0,'+(-radius-19)+')')
+				.attr('height', icon_size)
+		    .attr('width', icon_size)
+		    .html(icons[i]);
+			}
+
+			const compiledSvg = $compile(svg.node())(scope);
+			element[0].children[0].replaceWith(compiledSvg[0]);
+			const progmax = 60; //set the maximum data as 60 (60mins)
+			const progstart = 0;
+			const progend = _.map(data,(layer)=>layer.closest_walk/progmax);
+			const maxend = Math.max(...progend);
+
+			const step = 0.01; // if end < start, this must be -0.01
+			let count = Math.abs((maxend-progstart)/step);
+			function updateProgress(progress){
+				for (let i=0; i<num_doughnuts; i++){
+					if (Math.round(progress*100) <= Math.round(progend[i]*100)){
+						foreground[i].attr('d',arc.endAngle(twoPi*progress));
+						if (Math.round(progress*progmax)==60){
+							numberText[i].text("1hr+");
+						} else {
+							numberText[i].text(Math.round(progress*progmax));
+						}
+					}
+				}
+			}
+
+			let progress = progstart;
+			(function loops(){
+				updateProgress(progress);
+				if (count>0){
+					count--;
+					progress += step;
+					setTimeout(loops,5);
+				}
+			})();
+
+		}
+
+	};
+
+	return{
+		restrict: 'EAC',
+		scope:{
+			data: '=',
+			key: '@',
+			valueProp: '@',
+			label: '@'
+		},
+		link: main
+	};
+	}]);
 </script>
+</body>
 </html>
