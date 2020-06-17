@@ -6,4 +6,4 @@ This is a simple map app that shows what's within X km from the selected place. 
 
 ## Getting Started
 
-The app is available here: https://shotahorii.github.io/project-whats-within-2km/
+The app is available here: https://shotahorii.github.io/whats-within-2km/
